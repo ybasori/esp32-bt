@@ -1,9 +1,17 @@
-// connect and receive message with bluetooth from android
-
+#include <ArduinoJson.h>
 #include <BLEDevice.h>
 #include <BLEServer.h>
 #include <BLEUtils.h>
 #include <BLE2902.h>
+#include <Wire.h>
+#include <Adafruit_GFX.h>
+#include <Adafruit_SSD1306.h>
+
+#define SCREEN_WIDTH 128
+#define SCREEN_HEIGHT 64
+#define OLED_RESET -1
+
+Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, OLED_RESET);
 
 #define SERVICE_UUID        "6E400001-B5A3-F393-E0A9-E50E24DCCA9E"
 #define CHARACTERISTIC_UUID "6E400002-B5A3-F393-E0A9-E50E24DCCA9E"
@@ -41,6 +49,15 @@ class MyCallbacks: public BLECharacteristicCallbacks {
             // Copy bytes safely
             memcpy(buffer, rxValue.c_str(), copyLen);
             buffer[copyLen] = '\0';
+
+            DynamicJsonDocument doc(1024);
+            DeserializationError error = deserializeJson(doc, rxValue);
+
+            if(error){
+              Serial.print(" JSON parser error: ");
+              Serial.println(error.c_str());
+              return;
+            }
             
             Serial.print("✅ Clean: '");
             Serial.print(buffer);
@@ -51,13 +68,22 @@ class MyCallbacks: public BLECharacteristicCallbacks {
             // Process command
             String command(buffer);
             command.trim();
-        if (command == "LED ON") {
-          digitalWrite(LED_BUILTIN, HIGH);
-          Serial.println("LED ON");
-        } else if (command == "LED OFF") {
-          digitalWrite(LED_BUILTIN, LOW);
-          Serial.println("LED OFF");
-        }
+            if(doc["type"]=="io"){
+              if (doc["data"] == "LED ON") {
+                digitalWrite(LED_BUILTIN, HIGH);
+                Serial.println("LED ON");
+              } else if (doc["data"] == "LED OFF") {
+                digitalWrite(LED_BUILTIN, LOW);
+                Serial.println("LED OFF");
+              }
+            }
+            if(doc["type"]=="message"){
+              display.clearDisplay();
+              display.setCursor(0,0);   // reset cursor position
+              const char* message = doc["data"];
+              display.println(message);
+              display.display();
+            }
       }
     }
 };
@@ -65,6 +91,18 @@ class MyCallbacks: public BLECharacteristicCallbacks {
 void setup() {
   Serial.begin(115200);
   pinMode(LED_BUILTIN, OUTPUT);
+  Wire.begin(21, 22);
+
+  // initialize OLED
+  if(!display.begin(SSD1306_SWITCHCAPVCC, 0x3C)) {
+    Serial.println("OLED failed");
+    while(true);
+  }
+
+  display.clearDisplay();
+  display.setTextSize(1);
+  display.setTextColor(SSD1306_WHITE);
+  display.setCursor(0,0);
   
   BLEDevice::init("ESP32_BLE");
   pServer = BLEDevice::createServer();
