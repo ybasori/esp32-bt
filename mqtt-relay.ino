@@ -12,6 +12,12 @@ const int mqtt_port = 8883;
 const char* mqtt_user = "xxxx";
 const char* mqtt_pass = "xxxx";
 
+const char* emqx_ca_cert ="-----BEGIN CERTIFICATE-----\n" \
+"xxxx\n" \
+"xxxx\n" \
+"xxxx\n" \
+"-----END CERTIFICATE-----";
+
 #define RELAY_PIN 18
 
 WiFiClientSecure espClient;
@@ -54,23 +60,16 @@ void callback(char* topic, byte* payload, unsigned int length) {
 }
 
 void reconnect() {
-
   while (!client.connected()) {
-
     Serial.print("Connecting to MQTT...");
 
-    if (client.connect(
-      "ESP32Client",
-      mqtt_user,
-      mqtt_pass
-    )) {
+    // Generate a unique Client ID using a random hex string
+    String clientId = "ESP32Client-" + String(random(0xffff), HEX);
 
+    if (client.connect(clientId.c_str(), mqtt_user, mqtt_pass)) {
       Serial.println("connected");
-
       client.subscribe("home/yusuf-pc");
-
     } else {
-
       Serial.print("failed, rc=");
       Serial.print(client.state());
       Serial.println(" retrying...");
@@ -81,19 +80,14 @@ void reconnect() {
 }
 
 void setup() {
-
   pinMode(RELAY_PIN, OUTPUT);
-
-  // relay OFF initially
-  digitalWrite(RELAY_PIN, HIGH);
-
+  digitalWrite(RELAY_PIN, HIGH); // relay OFF initially
   setup_wifi();
 
-  // required for EMQX TLS
-  espClient.setInsecure();
+  // Use official CA certificate validation instead of setInsecure()
+  espClient.setCACert(emqx_ca_cert);
 
-  client.setServer(mqtt_server, mqtt_port);
-
+  client.setServer(mqtt_server, mqtt_port); // Ensure mqtt_port is 8883
   client.setCallback(callback);
 }
 
